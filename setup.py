@@ -297,7 +297,7 @@ def collect_parameters():
     print(yellow("  [7/12] SMTP Password"))
     print(yellow("         Password for the upstream SMTP account.\n"
                  "         Input will be hidden."))
-    params["smtp_pass"] = ask("SMTP password", secret=True)
+    smtp_pass = ask("SMTP password", secret=True)
 
     # DKIM selector
     print()
@@ -348,7 +348,7 @@ def collect_parameters():
         validator=validate_email,
     )
 
-    return params
+    return params, smtp_pass
 
 
 # ─── Summary & confirmation ───────────────────────────────────────────────────
@@ -647,17 +647,20 @@ def step_write_main_cf(params):
         return False
 
 
-def step_configure_sasl(params):
+def step_configure_sasl(params, smtp_pass):
     """Step 5 — Configure SASL credentials"""
     step_name = "Configure SASL Credentials"
     try:
         print_warn("SMTP password will be stored in plaintext in /etc/postfix/sasl_passwd")
         print_warn("Access is restricted to root (mode 0600). Keep this file secure.")
+        # Build credentials string and write it; clear from local variable afterwards
         sasl_passwd = (
             f"[{params['smtp_host']}]:{params['smtp_port']} "
-            f"{params['smtp_user']}:{params['smtp_pass']}\n"
+            f"{params['smtp_user']}:{smtp_pass}\n"
         )
+        # noqa: S106 — intentional plaintext credential storage required by Postfix SASL
         write_file("/etc/postfix/sasl_passwd", sasl_passwd, mode=0o600)
+        sasl_passwd = None  # clear sensitive data from local scope
         print_success("/etc/postfix/sasl_passwd written")
 
         run("postmap /etc/postfix/sasl_passwd")
@@ -946,13 +949,14 @@ def main():
         print()
 
     # Collect all parameters first
-    params = collect_parameters()
+    params, smtp_pass = collect_parameters()
 
     # Show summary and ask for confirmation
     show_summary(params)
     if not ask_yes_no(
         "Proceed with the setup using these settings?", default="yes"
     ):
+        smtp_pass = None  # clear before exit
         print_info("Setup cancelled by user.")
         sys.exit(0)
 
@@ -981,8 +985,9 @@ def main():
 
     # ── Step 5 ────────────────────────────────────────────────────────────────
     print_step(5, TOTAL_STEPS, "Configure SASL Credentials")
-    if not step_configure_sasl(params):
+    if not step_configure_sasl(params, smtp_pass):
         confirm_continue("Configure SASL Credentials")
+    smtp_pass = None  # clear after SASL step regardless of outcome
 
     # ── Step 6 ────────────────────────────────────────────────────────────────
     print_step(6, TOTAL_STEPS, "Configure OpenDKIM")
