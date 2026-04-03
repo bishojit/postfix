@@ -1,5 +1,15 @@
 # Testing
 
+## Quick Diagnostics
+
+Run the built-in diagnostics tool for a comprehensive health check covering services, configuration, DNS, mail queue, and recent log activity:
+
+```bash
+sudo python3 debug.py
+```
+
+This produces a color-coded report and saves a structured `debug_report.json` file.
+
 ## From the Relay Server
 
 ### Send a Test Email

@@ -1,5 +1,15 @@
 # Troubleshooting
 
+## Diagnostics Tool
+
+Before diving into manual troubleshooting, run the diagnostics script for an automated health check:
+
+```bash
+sudo python3 debug.py
+```
+
+This checks system info, service status, configuration files, DNS records, mail queue, and recent log activity — all in one report. Results are also saved to `debug_report.json`.
+
 ## Common Issues
 
 ### Connection refused on port 25

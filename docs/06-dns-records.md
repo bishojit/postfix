@@ -1,8 +1,8 @@
 # DNS Records
 
-After running `setup.py`, you must publish DNS records for your sending domain. The script displays the exact values — add them at your domain registrar or DNS provider.
+After running `setup.py`, you must publish DNS records for your sending domain. The script displays the exact values in **Step 9** and then **verifies them live** in **Step 10**. Add any missing records at your domain registrar or DNS provider.
 
-> Allow 30–60 minutes for DNS propagation before testing.
+> Allow 30–60 minutes for DNS propagation before testing. You can re-run `setup.py` or `debug.py` to re-check.
 
 ---
 

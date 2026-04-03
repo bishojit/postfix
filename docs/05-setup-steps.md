@@ -1,6 +1,6 @@
 # Setup Steps
 
-The script executes 9 steps sequentially. Each step reports pass/fail. On failure, you're prompted to continue or abort.
+The script executes 10 steps sequentially. Each step reports pass/fail. On failure, you're prompted to continue or abort. After all steps, configuration is saved to `relay_setup_config.json`.
 
 ---
 
@@ -151,3 +151,26 @@ Records shown:
 | TXT  | `_dmarc.yourdomain.com`                | DMARC policy              |
 
 See [06-dns-records.md](06-dns-records.md) for detailed guidance.
+
+---
+
+## Step 10 — Verify DNS Records & Enforce DKIM/DMARC
+
+**Performs live DNS lookups to verify that required records are published.**
+
+Uses `dig` (or `nslookup` fallback) to check:
+
+| Record | What is checked                                                |
+| ------ | -------------------------------------------------------------- |
+| A      | `relay_hostname` resolves and matches the server's local IP    |
+| SPF    | TXT record on `sending_domain` starts with `v=spf1`           |
+| DKIM   | TXT record on `<selector>._domainkey.<domain>` contains `p=`  |
+| DMARC  | TXT record on `_dmarc.<domain>` starts with `v=DMARC1`        |
+
+**Enforcement:**
+
+- If DMARC policy is `p=none`, recommends upgrading to `quarantine` or `reject`
+- If DMARC record is missing the `rua` reporting tag, warns about it
+- For each missing record, prints the **exact value to add** to DNS
+
+This step reports warnings (records exist but need improvement) or failures (records missing). You are prompted to continue if any records are missing.

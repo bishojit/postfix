@@ -53,11 +53,19 @@ The script will:
 
 ### 4. Publish DNS Records
 
-After the script completes, add the displayed SPF, DKIM, and DMARC records to your DNS zone. See [06-dns-records.md](06-dns-records.md).
+After step 9, the script displays the exact DNS records to add. Step 10 then **verifies** whether those records are already published and flags any that are missing or misconfigured.
+
+See [06-dns-records.md](06-dns-records.md).
 
 ### 5. Test
 
 Send a test email and verify delivery. See [07-testing.md](07-testing.md).
+
+You can also run the diagnostics tool for a full health check:
+
+```bash
+sudo python3 debug.py
+```
 
 ## Re-running the Script
 
@@ -67,5 +75,7 @@ The script is **idempotent** for most operations:
 - DKIM keys are **not regenerated** if they already exist (to avoid breaking published DNS records)
 - Packages are only installed if missing
 - UFW rules are added (duplicates are harmless)
+- **Configuration is saved** to `relay_setup_config.json` — on re-run, all 12 prompts are pre-filled with previous values (press Enter to keep them)
+- SMTP password is **never saved** and always re-prompted
 
 You can safely re-run the script to change configuration parameters.

@@ -106,7 +106,7 @@ Console report with ANSI colors, same style as `setup.py`. Optionally write a `d
 ## Implementation Order
 
 1. ✅ Create this plan
-2. Task 2 first (config persistence) — foundational, other tasks depend on saved config
-3. Task 1 (DNS verification) — new step in setup.py
-4. Task 3 (debug.py) — standalone, reuses DNS helpers
-5. Update documentation
+2. ✅ Task 2 (config persistence) — `load_config()`/`save_config()` in setup.py, JSON at `/etc/postfix/relay_setup_config.json`
+3. ✅ Task 1 (DNS verification) — Step 10 `step_verify_dns()` with `dns_resolve_txt()`/`dns_resolve_a()` helpers
+4. ✅ Task 3 (debug.py) — 7-section diagnostic report with JSON export
+5. ✅ Documentation updates — README, 01-overview, 03-installation, 05-setup-steps, 06-dns-records, 07-testing, 10-troubleshooting

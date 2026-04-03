@@ -5,8 +5,14 @@ Automated production setup for a Postfix SMTP relay server on Ubuntu/Debian. A s
 ## Quick Start
 
 ```bash
+# First-time setup (or reconfigure)
 sudo python3 setup.py
+
+# Diagnostics & health check
+sudo python3 debug.py
 ```
+
+**Re-run friendly:** On subsequent runs, `setup.py` auto-fills previous configuration from `relay_setup_config.json` — just press Enter to keep saved values.
 
 ## Documentation
 
