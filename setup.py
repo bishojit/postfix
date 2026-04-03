@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 Postfix SMTP Relay Server - Production Setup Script
 Automates full Postfix relay server configuration on Ubuntu/Debian.
@@ -14,7 +14,7 @@ import shutil
 import json
 from datetime import datetime, timezone
 
-# â”€â”€â”€ ANSI Colour Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─── ANSI Colour Helpers ─────────────────────────────────────────────────────
 
 RESET  = "\033[0m"
 BOLD   = "\033[1m"
@@ -31,39 +31,39 @@ def cyan(msg):   return f"{CYAN}{msg}{RESET}"
 def bold(msg):   return f"{BOLD}{msg}{RESET}"
 
 
-def print_success(msg): print(green(f"  âœ”  {msg}"))
-def print_warn(msg):    print(yellow(f"  âš   {msg}"))
-def print_error(msg):   print(red(f"  âœ˜  {msg}"))
-def print_info(msg):    print(yellow(f"  â„¹  {msg}"))
+def print_success(msg): print(green(f"  ✔  {msg}"))
+def print_warn(msg):    print(yellow(f"  ⚠  {msg}"))
+def print_error(msg):   print(red(f"  ✘  {msg}"))
+def print_info(msg):    print(yellow(f"  ℹ  {msg}"))
 def print_step(n, total, title):
     print()
-    print(cyan(f"{'â”€' * 60}"))
-    print(cyan(f"  Step {n} of {total} â€” {title}"))
-    print(cyan(f"{'â”€' * 60}"))
+    print(cyan(f"{'─' * 60}"))
+    print(cyan(f"  Step {n} of {total} — {title}"))
+    print(cyan(f"{'─' * 60}"))
 
 
-# â”€â”€â”€ Banner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─── Banner ──────────────────────────────────────────────────────────────────
 
 BANNER = r"""
-  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—
-  â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â•šâ•â•â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘â•šâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•
-  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—   â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ•‘ â•šâ–ˆâ–ˆâ–ˆâ•”â•
-  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â•šâ•â•â•â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•‘ â–ˆâ–ˆâ•”â–ˆâ–ˆâ•—
-  â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•”â• â–ˆâ–ˆâ•—
-  â•šâ•â•      â•šâ•â•â•â•â•â• â•šâ•â•â•â•â•â•â•   â•šâ•â•   â•šâ•â•     â•šâ•â•â•šâ•â•  â•šâ•â•
+  ██████╗  ██████╗ ███████╗████████╗███████╗██╗██╗  ██╗
+  ██╔══██╗██╔═══██╗██╔════╝╚══██╔══╝██╔════╝██║╚██╗██╔╝
+  ██████╔╝██║   ██║███████╗   ██║   █████╗  ██║ ╚███╔╝ 
+  ██╔═══╝ ██║   ██║╚════██║   ██║   ██╔══╝  ██║ ██╔██╗ 
+  ██║     ╚██████╔╝███████║   ██║   ██║     ██║██╔╝ ██╗
+  ╚═╝      ╚═════╝ ╚══════╝   ╚═╝   ╚═╝     ╚═╝╚═╝  ╚═╝
 
-        SMTP Relay Server â€” Production Setup v1.0
+        SMTP Relay Server — Production Setup v1.0
 """
 
 
 def print_banner():
     print(cyan(BANNER))
     print(cyan("  Automated Postfix relay configuration for Ubuntu/Debian"))
-    print(cyan("  Uses only Python 3 standard library â€” no external dependencies"))
+    print(cyan("  Uses only Python 3 standard library — no external dependencies"))
     print()
 
 
-# â”€â”€â”€ Step tracking â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─── Step tracking ───────────────────────────────────────────────────────────
 
 TOTAL_STEPS = 10
 step_results = []   # list of (title, passed: bool, note: str)
@@ -73,7 +73,7 @@ def record(title, passed, note=""):
     step_results.append((title, passed, note))
 
 
-# â”€â”€â”€ Configuration Persistence â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─── Configuration Persistence ───────────────────────────────────────────────
 
 CONFIG_PATH_ROOT = "/etc/postfix/relay_setup_config.json"
 CONFIG_PATH_LOCAL = os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -87,7 +87,7 @@ CONFIG_FIELDS = [
 
 
 def get_config_path():
-    """Return the config path â€” /etc/postfix location for root, local otherwise."""
+    """Return the config path — /etc/postfix location for root, local otherwise."""
     if os.geteuid() == 0:
         return CONFIG_PATH_ROOT
     return CONFIG_PATH_LOCAL
@@ -125,7 +125,7 @@ def save_config(params):
         print_warn(f"Could not save config: {exc}")
 
 
-# â”€â”€â”€ Utilities â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─── Utilities ───────────────────────────────────────────────────────────────
 
 def run(cmd, env_extra=None, check=True, capture=False):
     """Run a shell command, return (returncode, stdout, stderr)."""
@@ -173,7 +173,7 @@ def ask(prompt_text, default="", secret=False, validator=None, optional=False):
     - optional=True allows blank answers (returns "").
     """
     hint = f" [{default}]" if default else (" [optional]" if optional else "")
-    full_prompt = yellow(f"  â†’ {prompt_text}{hint}: ")
+    full_prompt = yellow(f"  ? {prompt_text}{hint}: ")
     while True:
         if secret:
             value = getpass.getpass(full_prompt)
@@ -195,7 +195,7 @@ def ask(prompt_text, default="", secret=False, validator=None, optional=False):
 def ask_yes_no(prompt_text, default="yes"):
     """Ask a yes/no question, return True for yes."""
     hint = "[Y/n]" if default.lower() == "yes" else "[y/N]"
-    full_prompt = yellow(f"  â†’ {prompt_text} {hint}: ")
+    full_prompt = yellow(f"  ? {prompt_text} {hint}: ")
     while True:
         value = input(full_prompt).strip().lower()
         if not value:
@@ -219,7 +219,7 @@ def confirm_continue(step_name):
         sys.exit(1)
 
 
-# â”€â”€â”€ Validators â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─── Validators ──────────────────────────────────────────────────────────────
 
 def validate_hostname(v):
     if not v or "." not in v:
@@ -276,17 +276,17 @@ def normalize_ip_list(raw):
     return " ".join(sorted(networks))
 
 
-# â”€â”€â”€ Parameter collection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─── Parameter collection ────────────────────────────────────────────────────
 
 def collect_parameters():
     # Load previous config for auto-fill defaults
     saved = load_config()
     if saved:
-        print_info("Previous configuration loaded â€” press Enter to keep saved values.\n")
+        print_info("Previous configuration loaded — press Enter to keep saved values.\n")
 
-    print(cyan("\n  â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—"))
-    print(cyan("  â•‘         CONFIGURATION PARAMETERS                    â•‘"))
-    print(cyan("  â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•"))
+    print(cyan("\n  ╔══════════════════════════════════════════════════════╗"))
+    print(cyan("  ║         CONFIGURATION PARAMETERS                    ║"))
+    print(cyan("  ╚══════════════════════════════════════════════════════╝"))
     print(yellow("  Please answer the following questions.\n"
                  "  Press Enter to accept the [default] value where shown.\n"))
 
@@ -339,7 +339,7 @@ def collect_parameters():
     # SMTP port
     print()
     print(yellow("  [/13] Upstream SMTP Port"))
-    print(yellow("         Upstream SMTP port â€” usually 587 for STARTTLS."))
+    print(yellow("         Upstream SMTP port — usually 587 for STARTTLS."))
     params["smtp_port"] = ask(
         "Upstream SMTP port",
         default=saved.get("smtp_port", "587"),
@@ -433,13 +433,13 @@ def collect_parameters():
     return params, smtp_pass
 
 
-# â”€â”€â”€ Summary & confirmation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─── Summary & confirmation ───────────────────────────────────────────────────
 
 def show_summary(params):
     print()
-    print(cyan("  â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—"))
-    print(cyan("  â•‘              CONFIGURATION SUMMARY                  â•‘"))
-    print(cyan("  â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•"))
+    print(cyan("  ╔══════════════════════════════════════════════════════╗"))
+    print(cyan("  ║              CONFIGURATION SUMMARY                  ║"))
+    print(cyan("  ╚══════════════════════════════════════════════════════╝"))
     rows = [
         ("Relay hostname",        params["relay_hostname"]),
         ("Sending domain",        params["sending_domain"]),
@@ -447,7 +447,7 @@ def show_summary(params):
         ("Upstream SMTP host",    params["smtp_host"]),
         ("Upstream SMTP port",    params["smtp_port"]),
         ("SMTP username",         params["smtp_user"]),
-        ("SMTP password",         "â—â—â—â—â—â—â—â—"),
+        ("SMTP password",         "████████"),
         ("DKIM selector",         params["dkim_selector"]),
         ("Enable DKIM",           "yes" if params["enable_dkim"] else "no"),
         ("Enable UFW",            "yes" if params["enable_ufw"] else "no"),
@@ -460,29 +460,29 @@ def show_summary(params):
     print()
 
 
-# â”€â”€â”€ main.cf template â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─── main.cf template ────────────────────────────────────────────────────────
 
 MAIN_CF_TEMPLATE = """\
-# â”€â”€â”€ Generated by setup.py on {timestamp} â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-# â”€â”€â”€ Identity â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─── Generated by setup.py on {timestamp} ─────────────────────
+# ─── Identity ────────────────────────────────────────────────────────────────
 myhostname = {relay_hostname}
 myorigin = /etc/mailname
 mydomain = {sending_domain}
 
-# â”€â”€â”€ Network â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─── Network ─────────────────────────────────────────────────────────────────
 inet_interfaces = all
 inet_protocols = ipv4
 mynetworks = {mynetworks}
 
-# â”€â”€â”€ Relay â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─── Relay ───────────────────────────────────────────────────────────────────
 relayhost = [{smtp_host}]:{smtp_port}
 
-# â”€â”€â”€ Outbound SASL Auth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─── Outbound SASL Auth ──────────────────────────────────────────────────────
 smtp_sasl_auth_enable = yes
 smtp_sasl_password_maps = hash:/etc/postfix/sasl_passwd
 smtp_sasl_security_options = noanonymous
 
-# â”€â”€â”€ Outbound TLS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─── Outbound TLS ────────────────────────────────────────────────────────────
 smtp_use_tls = yes
 smtp_tls_security_level = encrypt
 smtp_tls_note_starttls_offer = yes
@@ -492,12 +492,12 @@ smtp_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
 smtp_tls_mandatory_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
 smtp_tls_ciphers = high
 
-# â”€â”€â”€ Inbound Relay Restrictions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─── Inbound Relay Restrictions ──────────────────────────────────────────────
 smtpd_recipient_restrictions =
     permit_mynetworks,
     reject_unauth_destination
 
-# â”€â”€â”€ Anti-spam / Hardening â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─── Anti-spam / Hardening ───────────────────────────────────────────────────
 smtpd_helo_required = yes
 smtpd_helo_restrictions =
     permit_mynetworks,
@@ -511,29 +511,29 @@ smtpd_sender_restrictions =
     reject_unknown_sender_domain,
     permit
 
-# â”€â”€â”€ Rate Limiting â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─── Rate Limiting ───────────────────────────────────────────────────────────
 smtpd_client_message_rate_limit = {rate_limit}
 smtpd_client_connection_count_limit = 20
 smtpd_client_connection_rate_limit = 30
 anvil_rate_time_unit = 60s
 
-# â”€â”€â”€ Queue / Delivery â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─── Queue / Delivery ────────────────────────────────────────────────────────
 maximal_queue_lifetime = 1d
 bounce_queue_lifetime = 6h
 maximal_backoff_time = 1h
 minimal_backoff_time = 5m
 
-# â”€â”€â”€ Message Size â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─── Message Size ────────────────────────────────────────────────────────────
 message_size_limit = 10240000
 
-# â”€â”€â”€ Sender Address Rewriting â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─── Sender Address Rewriting ───────────────────────────────────────────────
 # Rewrites the envelope sender and From: header for locally-submitted mail
 # (e.g. mail/sendmail commands) so it appears as the sending domain, not
 # the raw system user@short-hostname (e.g. root@vmi2558887).
 sender_canonical_maps = static:noreply@{sending_domain}
 sender_canonical_classes = envelope_sender, header_sender
 
-# â”€â”€â”€ Misc â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─── Misc ────────────────────────────────────────────────────────────────────
 append_dot_mydomain = no
 readme_directory = no
 compatibility_level = 3.6
@@ -541,7 +541,7 @@ compatibility_level = 3.6
 """
 
 MILTER_SECTION_ENABLED = """\
-# â”€â”€â”€ OpenDKIM Milter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─── OpenDKIM Milter ─────────────────────────────────────────────────────────
 milter_default_action = accept
 milter_protocol = 6
 smtpd_milters = local:opendkim/opendkim.sock
@@ -549,7 +549,7 @@ non_smtpd_milters = local:opendkim/opendkim.sock
 """
 
 MILTER_SECTION_DISABLED = """\
-# â”€â”€â”€ OpenDKIM Milter (disabled) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─── OpenDKIM Milter (disabled) ──────────────────────────────────────────────
 # milter_default_action = accept
 # milter_protocol = 6
 # smtpd_milters = local:opendkim/opendkim.sock
@@ -557,7 +557,7 @@ MILTER_SECTION_DISABLED = """\
 """
 
 
-# â”€â”€â”€ OpenDKIM config templates â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─── OpenDKIM config templates ───────────────────────────────────────────────
 
 OPENDKIM_CONF_TEMPLATE = """\
 # Generated by setup.py
@@ -598,10 +598,10 @@ localhost
 """
 
 
-# â”€â”€â”€ Step functions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─── Step functions ──────────────────────────────────────────────────────────
 
 def step_system_check(params):
-    """Step 1 â€” System Check"""
+    """Step 1 — System Check"""
     step_name = "System Check"
     errors = []
 
@@ -625,7 +625,7 @@ def step_system_check(params):
     if distro_id in ("ubuntu", "debian"):
         print_success(f"OS: {distro_id.capitalize()} (supported)")
     else:
-        msg = f"OS '{distro_id}' is not Ubuntu/Debian â€” setup may fail"
+        msg = f"OS '{distro_id}' is not Ubuntu/Debian — setup may fail"
         print_warn(msg)
         errors.append(msg)
 
@@ -650,7 +650,7 @@ def step_system_check(params):
 
 
 def step_install_packages(params):
-    """Step 2 â€” Install Packages"""
+    """Step 2 — Install Packages"""
     step_name = "Install Packages"
     try:
         env = {"DEBIAN_FRONTEND": "noninteractive"}
@@ -674,7 +674,7 @@ def step_install_packages(params):
         print_success("Debconf pre-seeded for postfix")
 
         # apt update
-        print_info("Running apt update â€¦")
+        print_info("Running apt update —")
         run("apt-get update -qq", env_extra=env)
         print_success("apt update complete")
 
@@ -684,7 +684,7 @@ def step_install_packages(params):
             packages += ["opendkim", "opendkim-tools"]
 
         pkg_str = " ".join(packages)
-        print_info(f"Installing: {pkg_str} â€¦")
+        print_info(f"Installing: {pkg_str} —")
         run(
             f"apt-get install -y -qq {pkg_str}",
             env_extra=env,
@@ -699,7 +699,7 @@ def step_install_packages(params):
 
 
 def step_configure_mailname(params):
-    """Step 3 â€” Configure /etc/mailname"""
+    """Step 3 — Configure /etc/mailname"""
     step_name = "Configure /etc/mailname"
     try:
         write_file("/etc/mailname", params["relay_hostname"] + "\n", mode=0o644)
@@ -713,7 +713,7 @@ def step_configure_mailname(params):
 
 
 def step_write_main_cf(params):
-    """Step 4 â€” Write /etc/postfix/main.cf"""
+    """Step 4 — Write /etc/postfix/main.cf"""
     step_name = "Write /etc/postfix/main.cf"
     try:
         milter = MILTER_SECTION_ENABLED if params["enable_dkim"] else MILTER_SECTION_DISABLED
@@ -738,7 +738,7 @@ def step_write_main_cf(params):
 
 
 def step_configure_sasl(params, smtp_pass):
-    """Step 5 â€” Configure SASL credentials"""
+    """Step 5 — Configure SASL credentials"""
     step_name = "Configure SASL Credentials"
     try:
         print_warn("SMTP password will be stored in plaintext in /etc/postfix/sasl_passwd")
@@ -748,7 +748,7 @@ def step_configure_sasl(params, smtp_pass):
             f"[{params['smtp_host']}]:{params['smtp_port']} "
             f"{params['smtp_user']}:{smtp_pass}\n"
         )
-        # noqa: S106 â€” intentional plaintext credential storage required by Postfix SASL
+        # noqa: S106 — intentional plaintext credential storage required by Postfix SASL
         write_file("/etc/postfix/sasl_passwd", sasl_passwd, mode=0o600)
         sasl_passwd = None  # clear sensitive data from local scope
         print_success("/etc/postfix/sasl_passwd written")
@@ -770,10 +770,10 @@ def step_configure_sasl(params, smtp_pass):
 
 
 def step_configure_opendkim(params):
-    """Step 6 â€” Configure OpenDKIM"""
+    """Step 6 — Configure OpenDKIM"""
     step_name = "Configure OpenDKIM"
     if not params["enable_dkim"]:
-        print_info("DKIM disabled â€” skipping")
+        print_info("DKIM disabled — skipping")
         record(step_name, True, "skipped (disabled)")
         return True
     try:
@@ -828,7 +828,7 @@ def step_configure_opendkim(params):
         # Generate key pair (only if it doesn't already exist)
         private_key = f"{key_dir}/{selector}.private"
         if os.path.exists(private_key):
-            print_warn(f"DKIM private key already exists: {private_key} â€” skipping generation")
+            print_warn(f"DKIM private key already exists: {private_key} — skipping generation")
         else:
             run(
                 ["opendkim-genkey", "-b", "2048", "-d", domain,
@@ -852,10 +852,10 @@ def step_configure_opendkim(params):
             with open(txt_key_file) as f:
                 dkim_dns = f.read()
             print()
-            print(cyan("  â”Œâ”€â”€â”€ DKIM DNS Record (add to your DNS zone) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€"))
+            print(cyan("  ─── DKIM DNS Record (add to your DNS zone) ─────────────────"))
             for line in dkim_dns.strip().splitlines():
-                print(cyan(f"  â”‚  {line}"))
-            print(cyan("  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€"))
+                print(cyan(f"  ║  {line}"))
+            print(cyan("  ─────────────────────────────────────────────────────────────"))
             # Store for final summary
             params["_dkim_dns"] = dkim_dns.strip()
 
@@ -868,15 +868,15 @@ def step_configure_opendkim(params):
 
 
 def step_configure_ufw(params):
-    """Step 7 â€” Configure UFW Firewall"""
+    """Step 7 — Configure UFW Firewall"""
     step_name = "Configure UFW"
     if not params["enable_ufw"]:
-        print_info("UFW rules disabled â€” skipping")
+        print_info("UFW rules disabled — skipping")
         record(step_name, True, "skipped (disabled)")
         return True
     try:
         if not shutil.which("ufw"):
-            print_warn("ufw not installed â€” installing â€¦")
+            print_warn("ufw not installed — installing —")
             run("apt-get install -y -qq ufw",
                 env_extra={"DEBIAN_FRONTEND": "noninteractive"})
 
@@ -912,7 +912,7 @@ def step_configure_ufw(params):
 
 
 def step_restart_services(params):
-    """Step 8 â€” Restart Services"""
+    """Step 8 — Restart Services"""
     step_name = "Restart Services"
     errors = []
 
@@ -935,7 +935,7 @@ def step_restart_services(params):
     return passed
 
 
-# â”€â”€â”€ DNS Resolution Helpers (stdlib only â€” uses dig/nslookup) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─── DNS Resolution Helpers (stdlib only — uses dig/nslookup) ────────────────
 
 def dns_resolve_txt(name):
     """Resolve TXT records for a domain name. Returns list of strings."""
@@ -951,7 +951,7 @@ def dns_resolve_txt(name):
                 )
                 if result.returncode == 0:
                     for line in result.stdout.strip().splitlines():
-                        # dig returns quoted strings â€” strip quotes and join parts
+                        # dig returns quoted strings — strip quotes and join parts
                         records.append(line.replace('"', '').strip())
                     return records
             else:
@@ -989,7 +989,7 @@ def dns_resolve_a(hostname):
 
 
 def step_verify_dns(params):
-    """Step 10 â€” Verify DNS Records & Enforce DKIM/DMARC"""
+    """Step 10 — Verify DNS Records & Enforce DKIM/DMARC"""
     step_name = "Verify DNS Records"
     domain = params["sending_domain"]
     relay_hostname = params["relay_hostname"]
@@ -1001,26 +1001,26 @@ def step_verify_dns(params):
     errors = []
 
     print()
-    print(cyan("  Checking live DNS records â€¦"))
+    print(cyan("  Checking live DNS records —"))
     print()
 
-    # â”€â”€ A Record â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── A Record ──────────────────────────────────────────────────────────
     a_records = dns_resolve_a(relay_hostname)
     if a_records:
         if local_ip in a_records:
-            print_success(f"A record: {relay_hostname} â†’ {', '.join(a_records)} (matches server IP)")
+            print_success(f"A record: {relay_hostname} → {', '.join(a_records)} (matches server IP)")
         else:
-            msg = (f"A record: {relay_hostname} â†’ {', '.join(a_records)} "
+            msg = (f"A record: {relay_hostname} → {', '.join(a_records)} "
                    f"(does NOT match local IP {local_ip})")
             print_warn(msg)
             warnings.append(msg)
     else:
-        msg = f"A record: {relay_hostname} â†’ NOT FOUND"
+        msg = f"A record: {relay_hostname} → NOT FOUND"
         print_error(msg)
-        print_info(f"  Add:  {relay_hostname}  â†’  A  â†’  {local_ip}")
+        print_info(f"  Add:  {relay_hostname}  →  A  →  {local_ip}")
         errors.append(msg)
 
-    # â”€â”€ SPF Record â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── SPF Record ────────────────────────────────────────────────────────
     ip_includes = ""
     for net in mynetworks.split():
         if net == "127.0.0.0/8":
@@ -1044,15 +1044,15 @@ def step_verify_dns(params):
         else:
             msg = "SPF record does not include relay server IP/hostname"
             print_warn(msg)
-            print_info(f"  Recommended:  {domain}  â†’  TXT  â†’  {expected_spf}")
+            print_info(f"  Recommended:  {domain}  →  TXT  →  {expected_spf}")
             warnings.append(msg)
     else:
         msg = f"SPF record: NOT FOUND on {domain}"
         print_error(msg)
-        print_info(f"  Add:  {domain}  â†’  TXT  â†’  {expected_spf}")
+        print_info(f"  Add:  {domain}  →  TXT  →  {expected_spf}")
         errors.append(msg)
 
-    # â”€â”€ DKIM Record â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── DKIM Record ───────────────────────────────────────────────────────
     dkim_name = f"{selector}._domainkey.{domain}"
     dkim_records = dns_resolve_txt(dkim_name)
     dkim_found = [r for r in dkim_records if "p=" in r]
@@ -1073,10 +1073,10 @@ def step_verify_dns(params):
             if "_dkim_dns" in params:
                 print_info(f"  Value: {params['_dkim_dns']}")
         else:
-            print_info("  DKIM is disabled â€” enable it for better deliverability")
+            print_info("  DKIM is disabled — enable it for better deliverability")
         errors.append(msg)
 
-    # â”€â”€ DMARC Record â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── DMARC Record ─────────────────────────────────────────────────────
     dmarc_name = f"_dmarc.{domain}"
     expected_dmarc = f"v=DMARC1; p=quarantine; rua=mailto:{admin_email}; ruf=mailto:{admin_email}; fo=1"
     dmarc_records = dns_resolve_txt(dmarc_name)
@@ -1085,9 +1085,9 @@ def step_verify_dns(params):
         print_success(f"DMARC record found: {dmarc_found[0]}")
         # Enforce policy strength
         if "p=none" in dmarc_found[0]:
-            msg = "DMARC policy is 'none' â€” upgrade to 'quarantine' or 'reject' for enforcement"
+            msg = "DMARC policy is 'none' — upgrade to 'quarantine' or 'reject' for enforcement"
             print_warn(msg)
-            print_info(f"  Recommended:  {dmarc_name}  â†’  TXT  â†’  {expected_dmarc}")
+            print_info(f"  Recommended:  {dmarc_name}  →  TXT  →  {expected_dmarc}")
             warnings.append(msg)
         elif "p=quarantine" in dmarc_found[0]:
             print_success("  DMARC policy: quarantine (good)")
@@ -1101,15 +1101,15 @@ def step_verify_dns(params):
     else:
         msg = f"DMARC record: NOT FOUND on {dmarc_name}"
         print_error(msg)
-        print_info(f"  Add:  {dmarc_name}  â†’  TXT  â†’  {expected_dmarc}")
+        print_info(f"  Add:  {dmarc_name}  →  TXT  →  {expected_dmarc}")
         errors.append(msg)
 
-    # â”€â”€ Summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Summary ──────────────────────────────────────────────────────────
     print()
     if errors:
-        print_error(f"DNS verification: {len(errors)} record(s) missing â€” add them before sending mail")
+        print_error(f"DNS verification: {len(errors)} record(s) missing — add them before sending mail")
     elif warnings:
-        print_warn(f"DNS verification: {len(warnings)} warning(s) â€” review recommendations above")
+        print_warn(f"DNS verification: {len(warnings)} warning(s) — review recommendations above")
     else:
         print_success("All DNS records verified successfully!")
 
@@ -1120,7 +1120,7 @@ def step_verify_dns(params):
 
 
 def step_show_dns_records(params):
-    """Step 9 â€” Display DNS records"""
+    """Step 9 — Display DNS records"""
     step_name = "DNS Records"
     domain = params["sending_domain"]
     relay_hostname = params["relay_hostname"]
@@ -1145,17 +1145,17 @@ def step_show_dns_records(params):
     dmarc_record = f"v=DMARC1; p=quarantine; rua=mailto:{admin_email}; ruf=mailto:{admin_email}; fo=1"
 
     print()
-    print(cyan("  â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—"))
-    print(cyan("  â•‘             DNS RECORDS TO ADD                              â•‘"))
-    print(cyan("  â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•"))
+    print(cyan("  ╔══════════════════════════════════════════════════════════════╗"))
+    print(cyan("  ?             DNS RECORDS TO ADD                              ?"))
+    print(cyan("  ╚══════════════════════════════════════════════════════════════╝"))
 
     print()
     print(cyan("  A Record (relay server):"))
-    print(f"    {bold(relay_hostname)}  â†’  A  â†’  {bold('<YOUR_SERVER_IP>')}")
+    print(f"    {bold(relay_hostname)}  →  A  →  {bold('<YOUR_SERVER_IP>')}")
 
     print()
     print(cyan("  SPF Record (TXT on root domain):"))
-    print(f"    {bold(domain)}  â†’  TXT  â†’  {bold(spf_record)}")
+    print(f"    {bold(domain)}  →  TXT  →  {bold(spf_record)}")
 
     print()
     if "_dkim_dns" in params:
@@ -1163,32 +1163,32 @@ def step_show_dns_records(params):
         print(f"    {bold(params['_dkim_dns'])}")
     else:
         print(cyan("  DKIM Record (TXT on):"))
-        print(f"    {bold(f'{selector}._domainkey.{domain}')}  â†’  TXT  â†’  (see /etc/opendkim/keys/{domain}/{selector}.txt)")
+        print(f"    {bold(f'{selector}._domainkey.{domain}')}  →  TXT  →  (see /etc/opendkim/keys/{domain}/{selector}.txt)")
 
     print()
     print(cyan("  DMARC Record (TXT):"))
-    print(f"    {bold('_dmarc.' + domain)}  â†’  TXT  â†’  {bold(dmarc_record)}")
+    print(f"    {bold('_dmarc.' + domain)}  →  TXT  →  {bold(dmarc_record)}")
 
     print()
     record(step_name, True)
     return True
 
 
-# â”€â”€â”€ Final summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─── Final summary ───────────────────────────────────────────────────────────
 
 def print_final_summary():
     print()
-    print(cyan("  â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—"))
-    print(cyan("  â•‘                  FINAL SETUP SUMMARY                        â•‘"))
-    print(cyan("  â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•"))
+    print(cyan("  ╔══════════════════════════════════════════════════════════════╗"))
+    print(cyan("  ?                  FINAL SETUP SUMMARY                        ?"))
+    print(cyan("  ╚══════════════════════════════════════════════════════════════╝"))
     print()
     all_passed = True
     for title, passed, note in step_results:
         if passed:
-            status = green("âœ” PASS")
+            status = green("✔ PASS")
         else:
             all_passed = False
-            status = red("âœ˜ FAIL")
+            status = red("✘ FAIL")
         line = f"  {status}  {title}"
         if note:
             line += f"  ({yellow(note)})"
@@ -1196,9 +1196,9 @@ def print_final_summary():
 
     print()
     if all_passed:
-        print(green("  â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•"))
-        print(green("  âœ”  All steps completed successfully!"))
-        print(green("  â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•"))
+        print(green("  ══════════════════════════════════════════════════════════════"))
+        print(green("  ✔  All steps completed successfully!"))
+        print(green("  ══════════════════════════════════════════════════════════════"))
         print()
         print(yellow("  Next steps:"))
         print(yellow("  1. Add the DNS records shown above to your DNS zone."))
@@ -1206,15 +1206,15 @@ def print_final_summary():
         print(yellow("  3. Send a test email: echo 'Test' | mail -s 'Relay test' you@example.com"))
         print(yellow("  4. Check mail logs: tail -f /var/log/mail.log"))
     else:
-        print(yellow("  â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•"))
-        print(yellow("  âš   Some steps failed â€” please review errors above."))
-        print(yellow("  â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•"))
+        print(yellow("  ══════════════════════════════════════════════════════════════"))
+        print(yellow("  ⚠  Some steps failed — please review errors above."))
+        print(yellow("  ══════════════════════════════════════════════════════════════"))
         print()
         print(yellow("  Review the failed items and rerun this script, or fix manually."))
     print()
 
 
-# â”€â”€â”€ Main â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─── Main ────────────────────────────────────────────────────────────────────
 
 def main():
     print_banner()
@@ -1238,62 +1238,62 @@ def main():
         sys.exit(0)
 
     print()
-    print(cyan(f"  Starting setup â€” {TOTAL_STEPS} steps"))
+    print(cyan(f"  Starting setup — {TOTAL_STEPS} steps"))
 
-    # â”€â”€ Step 1 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Step 1 ────────────────────────────────────────────────────────────────
     print_step(1, TOTAL_STEPS, "System Check")
     if not step_system_check(params):
         confirm_continue("System Check")
 
-    # â”€â”€ Step 2 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Step 2 ────────────────────────────────────────────────────────────────
     print_step(2, TOTAL_STEPS, "Install Packages")
     if not step_install_packages(params):
         confirm_continue("Install Packages")
 
-    # â”€â”€ Step 3 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Step 3 ────────────────────────────────────────────────────────────────
     print_step(3, TOTAL_STEPS, "Configure /etc/mailname")
     if not step_configure_mailname(params):
         confirm_continue("Configure /etc/mailname")
 
-    # â”€â”€ Step 4 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Step 4 ────────────────────────────────────────────────────────────────
     print_step(4, TOTAL_STEPS, "Write /etc/postfix/main.cf")
     if not step_write_main_cf(params):
         confirm_continue("Write /etc/postfix/main.cf")
 
-    # â”€â”€ Step 5 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Step 5 ────────────────────────────────────────────────────────────────
     print_step(5, TOTAL_STEPS, "Configure SASL Credentials")
     if not step_configure_sasl(params, smtp_pass):
         confirm_continue("Configure SASL Credentials")
     smtp_pass = None  # clear after SASL step regardless of outcome
 
-    # â”€â”€ Step 6 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Step 6 ────────────────────────────────────────────────────────────────
     print_step(6, TOTAL_STEPS, "Configure OpenDKIM")
     if not step_configure_opendkim(params):
         confirm_continue("Configure OpenDKIM")
 
-    # â”€â”€ Step 7 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Step 7 ────────────────────────────────────────────────────────────────
     print_step(7, TOTAL_STEPS, "Configure UFW Firewall")
     if not step_configure_ufw(params):
         confirm_continue("Configure UFW Firewall")
 
-    # â”€â”€ Step 8 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Step 8 ────────────────────────────────────────────────────────────────
     print_step(8, TOTAL_STEPS, "Restart Services")
     if not step_restart_services(params):
         confirm_continue("Restart Services")
 
-    # â”€â”€ Step 9 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Step 9 ────────────────────────────────────────────────────────────────
     print_step(9, TOTAL_STEPS, "Display DNS Records")
     step_show_dns_records(params)
 
-    # â”€â”€ Step 10 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Step 10 ───────────────────────────────────────────────────────────────
     print_step(10, TOTAL_STEPS, "Verify DNS Records & Enforce DKIM/DMARC")
     if not step_verify_dns(params):
         confirm_continue("Verify DNS Records")
 
-    # â”€â”€ Save configuration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Save configuration ────────────────────────────────────────────────────
     save_config(params)
 
-    # â”€â”€ Final summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Final summary ─────────────────────────────────────────────────────────
     print_final_summary()
 
 
