@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "updated": "2026-04-03T16:35:28Z",
+  "relay_hostname": "relay.bikiran.win",
+  "sending_domain": "bikiran.win",
+  "trusted_ips_raw": "51.79.226.156",
+  "smtp_host": "smtp.n8nclouds.com",
+  "smtp_port": "587",
+  "smtp_user": "noreply@n8nclouds.com",
+  "dkim_selector": "mailman",
+  "enable_dkim": true,
+  "enable_ufw": true,
+  "rate_limit": "100",
+  "admin_email": "postmaster@bikiran.win"
+}

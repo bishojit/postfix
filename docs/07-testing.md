@@ -15,8 +15,10 @@ This produces a color-coded report and saves a structured `debug_report.json` fi
 ### Send a Test Email
 
 ```bash
-echo "Relay test body" | mail -s "Relay Test - $(date)" you@example.com
+echo "Relay test body" | mail -s "Relay Test - $(date)" -r "noreply@yourdomain.com" you@example.com
 ```
+
+> The `-r` flag sets the envelope sender and `From:` address explicitly. Without it the `mail` command uses `$USER@$(hostname -s)` (e.g. `root@vmi2558887`), which fails SPF/DMARC checks. The Postfix `sender_canonical_maps` setting in `main.cf` also rewrites this server-side as a second line of defence.
 
 ### Watch the Mail Log
 
