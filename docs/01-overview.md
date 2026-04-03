@@ -1,0 +1,84 @@
+# Overview
+
+## What Is This?
+
+A single-file Python 3 script (`setup.py`) that **fully automates** the deployment of a production Postfix SMTP relay server on Ubuntu/Debian.
+
+No external Python dependencies — uses only the standard library.
+
+## The Problem
+
+Many cloud providers (OVH, Hetzner, etc.) **block outbound SMTP port 25** on application servers. This means your app servers cannot send transactional email (password resets, invoices, notifications) directly.
+
+## The Solution
+
+Deploy a **dedicated relay server** on an unblocked host. Your app servers send mail to the relay on port 25 (trusted internal network), and the relay forwards everything to an upstream SMTP provider over port 587 with TLS + authentication.
+
+## Architecture
+
+```
+┌──────────────────────────────┐
+│  App Servers / Easypanel     │  ← Port 25 blocked by host
+│  (trusted internal IPs)      │
+└──────────────┬───────────────┘
+               │ Port 25 (internal, IP-whitelisted)
+               ▼
+┌──────────────────────────────┐
+│  Relay Server                │  ← Postfix + OpenDKIM
+│  (this script configures it) │
+└──────────────┬───────────────┘
+               │ Port 587 (STARTTLS + SASL Auth)
+               ▼
+┌──────────────────────────────┐
+│  Upstream SMTP Provider      │
+│  (SES, Mailgun, custom, etc) │
+└──────────────────────────────┘
+```
+
+## What the Script Does
+
+The interactive setup wizard collects 12 configuration parameters, then executes 9 automated steps:
+
+| Step | Action                                                    |
+| ---- | --------------------------------------------------------- |
+| 1    | System check (root, OS, apt)                              |
+| 2    | Install packages (postfix, mailutils, libsasl2, opendkim) |
+| 3    | Configure `/etc/mailname`                                 |
+| 4    | Generate and write `/etc/postfix/main.cf`                 |
+| 5    | Configure SASL credentials for upstream SMTP auth         |
+| 6    | Configure OpenDKIM for DKIM email signing                 |
+| 7    | Configure UFW firewall rules                              |
+| 8    | Restart and enable services                               |
+| 9    | Display DNS records you need to publish                   |
+
+Each step reports pass/fail status. On failure, you're prompted to continue or abort. A final summary shows the outcome of all steps.
+
+## Key Features
+
+- **Zero external dependencies** — Python 3 standard library only
+- **Interactive wizard** — guided prompts with defaults and validation
+- **DKIM signing** — automated OpenDKIM key generation and configuration
+- **Firewall hardening** — UFW rules restrict port 25 to trusted IPs only
+- **TLS enforcement** — disables SSLv2, SSLv3, TLSv1, TLSv1.1
+- **Rate limiting** — configurable per-client message and connection limits
+- **Anti-spam** — HELO restrictions, sender validation, recipient restrictions
+- **DNS guidance** — generates exact SPF, DKIM, and DMARC records to publish
+
+## Project Structure
+
+```
+postfix/
+├── setup.py                          # The setup script (run on the relay server)
+├── docs/                             # Documentation
+│   ├── 01-overview.md                # This file
+│   ├── 02-prerequisites.md           # System & DNS requirements
+│   ├── 03-installation.md            # How to run the script
+│   ├── 04-configuration.md           # All 12 parameters explained
+│   ├── 05-setup-steps.md             # What each step does internally
+│   ├── 06-dns-records.md             # SPF, DKIM, DMARC, PTR setup
+│   ├── 07-testing.md                 # Verification procedures
+│   ├── 08-operations.md              # Day-to-day operations & maintenance
+│   ├── 09-security.md                # Security hardening checklist
+│   └── 10-troubleshooting.md         # Common issues & fixes
+└── postfix_relay_setup_Version2.md   # Legacy manual setup guide
+```
