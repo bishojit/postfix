@@ -11,6 +11,7 @@ import socket
 import getpass
 import platform
 import shutil
+import json
 from datetime import datetime, timezone
 
 # ─── ANSI Colour Helpers ─────────────────────────────────────────────────────
@@ -64,12 +65,64 @@ def print_banner():
 
 # ─── Step tracking ───────────────────────────────────────────────────────────
 
-TOTAL_STEPS = 9
+TOTAL_STEPS = 10
 step_results = []   # list of (title, passed: bool, note: str)
 
 
 def record(title, passed, note=""):
     step_results.append((title, passed, note))
+
+
+# ─── Configuration Persistence ───────────────────────────────────────────────
+
+CONFIG_PATH_ROOT = "/etc/postfix/relay_setup_config.json"
+CONFIG_PATH_LOCAL = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                 "relay_setup_config.json")
+
+CONFIG_FIELDS = [
+    "relay_hostname", "sending_domain", "trusted_ips_raw", "smtp_host",
+    "smtp_port", "smtp_user", "dkim_selector", "enable_dkim", "enable_ufw",
+    "rate_limit", "admin_email",
+]
+
+
+def get_config_path():
+    """Return the config path — /etc/postfix location for root, local otherwise."""
+    if os.geteuid() == 0:
+        return CONFIG_PATH_ROOT
+    return CONFIG_PATH_LOCAL
+
+
+def load_config():
+    """Load saved configuration from JSON, return dict (empty if missing)."""
+    for path in (get_config_path(), CONFIG_PATH_LOCAL, CONFIG_PATH_ROOT):
+        try:
+            with open(path, "r") as fh:
+                data = json.load(fh)
+            if isinstance(data, dict):
+                print_success(f"Loaded previous config from {path}")
+                return data
+        except (OSError, json.JSONDecodeError, ValueError):
+            continue
+    return {}
+
+
+def save_config(params):
+    """Save configuration to JSON (excludes SMTP password)."""
+    path = get_config_path()
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    data = {"version": 1, "updated": now}
+    for key in CONFIG_FIELDS:
+        if key in params:
+            data[key] = params[key]
+    try:
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        with open(path, "w") as fh:
+            json.dump(data, fh, indent=2)
+        os.chmod(path, 0o640)
+        print_success(f"Configuration saved to {path}")
+    except OSError as exc:
+        print_warn(f"Could not save config: {exc}")
 
 
 # ─── Utilities ───────────────────────────────────────────────────────────────
@@ -225,6 +278,11 @@ def normalize_ip_list(raw):
 # ─── Parameter collection ────────────────────────────────────────────────────
 
 def collect_parameters():
+    # Load previous config for auto-fill defaults
+    saved = load_config()
+    if saved:
+        print_info("Previous configuration loaded — press Enter to keep saved values.\n")
+
     print(cyan("\n  ╔══════════════════════════════════════════════════════╗"))
     print(cyan("  ║         CONFIGURATION PARAMETERS                    ║"))
     print(cyan("  ╚══════════════════════════════════════════════════════╝"))
@@ -239,7 +297,7 @@ def collect_parameters():
                  "         (must match your DNS A record)."))
     params["relay_hostname"] = ask(
         "Relay hostname",
-        default="relay.yourdomain.com",
+        default=saved.get("relay_hostname", "relay.yourdomain.com"),
         validator=validate_hostname,
     )
 
@@ -249,6 +307,7 @@ def collect_parameters():
     print(yellow("         Your primary email sending domain (e.g. yourdomain.com)."))
     params["sending_domain"] = ask(
         "Sending domain",
+        default=saved.get("sending_domain", ""),
         validator=validate_domain,
     )
 
@@ -260,7 +319,7 @@ def collect_parameters():
                  "         127.0.0.0/8 is always included automatically."))
     raw_ips = ask(
         "Trusted IPs (comma-separated)",
-        default="127.0.0.0/8",
+        default=saved.get("trusted_ips_raw", "127.0.0.0/8"),
     )
     params["trusted_ips_raw"] = raw_ips
     params["mynetworks"] = normalize_ip_list(raw_ips)
@@ -272,7 +331,7 @@ def collect_parameters():
                  "         all outbound mail through."))
     params["smtp_host"] = ask(
         "Upstream SMTP host",
-        default="smtp.n8nclouds.com",
+        default=saved.get("smtp_host", "smtp.n8nclouds.com"),
         validator=validate_hostname,
     )
 
@@ -282,7 +341,7 @@ def collect_parameters():
     print(yellow("         Upstream SMTP port — usually 587 for STARTTLS."))
     params["smtp_port"] = ask(
         "Upstream SMTP port",
-        default="587",
+        default=saved.get("smtp_port", "587"),
         validator=validate_port,
     )
 
@@ -290,13 +349,16 @@ def collect_parameters():
     print()
     print(yellow("  [6/12] SMTP Username"))
     print(yellow("         Username for authenticating to the upstream SMTP server."))
-    params["smtp_user"] = ask("SMTP username")
+    params["smtp_user"] = ask(
+        "SMTP username",
+        default=saved.get("smtp_user", ""),
+    )
 
     # SMTP password
     print()
     print(yellow("  [7/12] SMTP Password"))
     print(yellow("         Password for the upstream SMTP account.\n"
-                 "         Input will be hidden."))
+                 "         Input will be hidden. (Never saved to config file)"))
     smtp_pass = ask("SMTP password", secret=True)
 
     # DKIM selector
@@ -306,7 +368,7 @@ def collect_parameters():
                  "         Will appear as <selector>._domainkey in DNS."))
     params["dkim_selector"] = ask(
         "DKIM selector",
-        default="relay",
+        default=saved.get("dkim_selector", "relay"),
     )
 
     # Enable DKIM
@@ -314,8 +376,9 @@ def collect_parameters():
     print(yellow("  [9/12] Enable DKIM"))
     print(yellow("         Install and configure OpenDKIM for outbound email signing.\n"
                  "         Strongly recommended for deliverability."))
+    dkim_default = "yes" if saved.get("enable_dkim", True) else "no"
     params["enable_dkim"] = ask_yes_no(
-        "Enable DKIM signing?", default="yes"
+        "Enable DKIM signing?", default=dkim_default
     )
 
     # Enable UFW
@@ -323,8 +386,9 @@ def collect_parameters():
     print(yellow("  [10/12] Enable UFW Firewall Rules"))
     print(yellow("          Add UFW rules to restrict port 25 to trusted IPs only.\n"
                  "          Recommended to prevent open-relay abuse."))
+    ufw_default = "yes" if saved.get("enable_ufw", True) else "no"
     params["enable_ufw"] = ask_yes_no(
-        "Enable UFW firewall rules?", default="yes"
+        "Enable UFW firewall rules?", default=ufw_default
     )
 
     # Rate limit
@@ -334,7 +398,7 @@ def collect_parameters():
                  "          (smtpd_client_message_rate_limit)."))
     params["rate_limit"] = ask(
         "Rate limit (msgs/client)",
-        default="100",
+        default=saved.get("rate_limit", "100"),
         validator=validate_rate,
     )
 
@@ -345,6 +409,7 @@ def collect_parameters():
                  "          generated DMARC DNS record for receiving reports."))
     params["admin_email"] = ask(
         "Admin email",
+        default=saved.get("admin_email", ""),
         validator=validate_email,
     )
 
@@ -845,6 +910,187 @@ def step_restart_services(params):
     return passed
 
 
+# ─── DNS Resolution Helpers (stdlib only — uses dig/nslookup) ────────────────
+
+def dns_resolve_txt(name):
+    """Resolve TXT records for a domain name. Returns list of strings."""
+    records = []
+    for tool in ("dig", "nslookup"):
+        if not shutil.which(tool):
+            continue
+        try:
+            if tool == "dig":
+                result = subprocess.run(
+                    ["dig", "+short", "TXT", name],
+                    capture_output=True, text=True, timeout=10,
+                )
+                if result.returncode == 0:
+                    for line in result.stdout.strip().splitlines():
+                        # dig returns quoted strings — strip quotes and join parts
+                        records.append(line.replace('"', '').strip())
+                    return records
+            else:
+                result = subprocess.run(
+                    ["nslookup", "-type=TXT", name],
+                    capture_output=True, text=True, timeout=10,
+                )
+                if result.returncode == 0:
+                    for line in result.stdout.splitlines():
+                        if "text =" in line.lower():
+                            txt = line.split("=", 1)[1].strip().strip('"')
+                            records.append(txt)
+                    return records
+        except (subprocess.TimeoutExpired, OSError):
+            continue
+    return records
+
+
+def dns_resolve_a(hostname):
+    """Resolve A record for a hostname. Returns list of IPs."""
+    try:
+        result = subprocess.run(
+            ["dig", "+short", "A", hostname],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return [ip.strip() for ip in result.stdout.strip().splitlines() if ip.strip()]
+    except (subprocess.TimeoutExpired, OSError):
+        pass
+    # Fallback to socket
+    try:
+        return [socket.gethostbyname(hostname)]
+    except socket.gaierror:
+        return []
+
+
+def step_verify_dns(params):
+    """Step 10 — Verify DNS Records & Enforce DKIM/DMARC"""
+    step_name = "Verify DNS Records"
+    domain = params["sending_domain"]
+    relay_hostname = params["relay_hostname"]
+    selector = params["dkim_selector"]
+    admin_email = params["admin_email"]
+    mynetworks = params["mynetworks"]
+    local_ip = get_local_ip()
+    warnings = []
+    errors = []
+
+    print()
+    print(cyan("  Checking live DNS records …"))
+    print()
+
+    # ── A Record ──────────────────────────────────────────────────────────
+    a_records = dns_resolve_a(relay_hostname)
+    if a_records:
+        if local_ip in a_records:
+            print_success(f"A record: {relay_hostname} → {', '.join(a_records)} (matches server IP)")
+        else:
+            msg = (f"A record: {relay_hostname} → {', '.join(a_records)} "
+                   f"(does NOT match local IP {local_ip})")
+            print_warn(msg)
+            warnings.append(msg)
+    else:
+        msg = f"A record: {relay_hostname} → NOT FOUND"
+        print_error(msg)
+        print_info(f"  Add:  {relay_hostname}  →  A  →  {local_ip}")
+        errors.append(msg)
+
+    # ── SPF Record ────────────────────────────────────────────────────────
+    ip_includes = ""
+    for net in mynetworks.split():
+        if net == "127.0.0.0/8":
+            continue
+        if net.endswith("/32"):
+            ip_includes += f" ip4:{net[:-3]}"
+        else:
+            ip_includes += f" ip4:{net}"
+    expected_spf = f"v=spf1{ip_includes} a:{relay_hostname} ~all"
+
+    spf_records = dns_resolve_txt(domain)
+    spf_found = [r for r in spf_records if r.startswith("v=spf1")]
+    if spf_found:
+        print_success(f"SPF record found: {spf_found[0]}")
+        # Check if relay IP is included
+        if relay_hostname in spf_found[0] or local_ip in spf_found[0]:
+            print_success("  SPF includes relay server")
+        else:
+            msg = "SPF record does not include relay server IP/hostname"
+            print_warn(msg)
+            print_info(f"  Recommended:  {domain}  →  TXT  →  {expected_spf}")
+            warnings.append(msg)
+    else:
+        msg = f"SPF record: NOT FOUND on {domain}"
+        print_error(msg)
+        print_info(f"  Add:  {domain}  →  TXT  →  {expected_spf}")
+        errors.append(msg)
+
+    # ── DKIM Record ───────────────────────────────────────────────────────
+    dkim_name = f"{selector}._domainkey.{domain}"
+    dkim_records = dns_resolve_txt(dkim_name)
+    dkim_found = [r for r in dkim_records if "p=" in r]
+    if dkim_found:
+        print_success(f"DKIM record found: {dkim_name}")
+        if "p=" in dkim_found[0] and len(dkim_found[0]) > 20:
+            print_success("  DKIM public key present")
+        else:
+            msg = "DKIM record exists but public key may be empty/invalid"
+            print_warn(msg)
+            warnings.append(msg)
+    else:
+        msg = f"DKIM record: NOT FOUND on {dkim_name}"
+        print_error(msg)
+        if params["enable_dkim"]:
+            key_path = f"/etc/opendkim/keys/{domain}/{selector}.txt"
+            print_info(f"  Add TXT record from: {key_path}")
+            if "_dkim_dns" in params:
+                print_info(f"  Value: {params['_dkim_dns']}")
+        else:
+            print_info("  DKIM is disabled — enable it for better deliverability")
+        errors.append(msg)
+
+    # ── DMARC Record ─────────────────────────────────────────────────────
+    dmarc_name = f"_dmarc.{domain}"
+    expected_dmarc = f"v=DMARC1; p=quarantine; rua=mailto:{admin_email}; ruf=mailto:{admin_email}; fo=1"
+    dmarc_records = dns_resolve_txt(dmarc_name)
+    dmarc_found = [r for r in dmarc_records if r.startswith("v=DMARC1")]
+    if dmarc_found:
+        print_success(f"DMARC record found: {dmarc_found[0]}")
+        # Enforce policy strength
+        if "p=none" in dmarc_found[0]:
+            msg = "DMARC policy is 'none' — upgrade to 'quarantine' or 'reject' for enforcement"
+            print_warn(msg)
+            print_info(f"  Recommended:  {dmarc_name}  →  TXT  →  {expected_dmarc}")
+            warnings.append(msg)
+        elif "p=quarantine" in dmarc_found[0]:
+            print_success("  DMARC policy: quarantine (good)")
+        elif "p=reject" in dmarc_found[0]:
+            print_success("  DMARC policy: reject (strict)")
+        # Check rua tag
+        if "rua=" not in dmarc_found[0]:
+            msg = "DMARC record missing 'rua' reporting tag"
+            print_warn(msg)
+            warnings.append(msg)
+    else:
+        msg = f"DMARC record: NOT FOUND on {dmarc_name}"
+        print_error(msg)
+        print_info(f"  Add:  {dmarc_name}  →  TXT  →  {expected_dmarc}")
+        errors.append(msg)
+
+    # ── Summary ──────────────────────────────────────────────────────────
+    print()
+    if errors:
+        print_error(f"DNS verification: {len(errors)} record(s) missing — add them before sending mail")
+    elif warnings:
+        print_warn(f"DNS verification: {len(warnings)} warning(s) — review recommendations above")
+    else:
+        print_success("All DNS records verified successfully!")
+
+    passed = len(errors) == 0
+    note = f"{len(errors)} missing, {len(warnings)} warnings" if (errors or warnings) else ""
+    record(step_name, passed, note)
+    return passed
+
+
 def step_show_dns_records(params):
     """Step 9 — Display DNS records"""
     step_name = "DNS Records"
@@ -1007,6 +1253,14 @@ def main():
     # ── Step 9 ────────────────────────────────────────────────────────────────
     print_step(9, TOTAL_STEPS, "Display DNS Records")
     step_show_dns_records(params)
+
+    # ── Step 10 ───────────────────────────────────────────────────────────────
+    print_step(10, TOTAL_STEPS, "Verify DNS Records & Enforce DKIM/DMARC")
+    if not step_verify_dns(params):
+        confirm_continue("Verify DNS Records")
+
+    # ── Save configuration ────────────────────────────────────────────────────
+    save_config(params)
 
     # ── Final summary ─────────────────────────────────────────────────────────
     print_final_summary()
